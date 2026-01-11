@@ -438,9 +438,9 @@ async def admin_add(update: Update, context: ContextTypes.DEFAULT_TYPE):
         admin_text += f"   └ যোগদান: {added_date[:10]}\n\n"
     
     admin_text += "\n**কমান্ড:**\n"
-admin_text += "➕ এডমিন যোগ: `/addadmin [user_id]`\n"
-admin_text += "➖ এডমিন রিমুভ: `/removeadmin [user_id]`\n"
-admin_text += "🔍 ইউজার খুঁজুন: `/finduser [username]`"
+    admin_text += "➕ এডমিন যোগ: `/addadmin [user_id]`\n"
+    admin_text += "➖ এডমিন রিমুভ: `/removeadmin [user_id]`\n"
+    admin_text += "🔍 ইউজার খুঁজুন: `/finduser [username]`"
     
     keyboard = [
         [InlineKeyboardButton("🔙 এডমিন প্যানেল", callback_data='admin_panel')]
