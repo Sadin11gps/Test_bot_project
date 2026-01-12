@@ -2,38 +2,32 @@ import asyncio
 import logging
 import os
 import aiosqlite
-from fastapi import FastAPI, Request, HTTPException
-from aiogram import Bot, Dispatcher
-from aiogram.types import Update
+from fastapi import FastAPI, Request
+from aiogram import Bot, Dispatcher, Router
+from aiogram.types import Update, Message, CallbackQuery, InlineKeyboardBuilder
 from aiogram.filters import CommandStart, Command
-from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-# ------------------ লগিং সেটআপ (ডিবাগের জন্য খুবই গুরুত্বপূর্ণ) ------------------
+# লগিং
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# BOT_TOKEN লোড + ডিবাগ
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-
-logger.info("Environment variables keys: %s", list(os.environ.keys()))
-logger.info("BOT_TOKEN from os.getenv: %s", BOT_TOKEN)
-
-if BOT_TOKEN is None or not isinstance(BOT_TOKEN, str) or len(BOT_TOKEN.strip()) < 10:
-    logger.error("BOT_TOKEN is missing or invalid! Please set it in Render Environment Variables.")
-    raise ValueError("BOT_TOKEN environment variable is not set properly!")
-
-# বাকি সেটিংস
+# Settings
+BOT_TOKEN = os.getenv("BOT_TOKEN") or "8059084521:AAGuVxr-6-X0Izld_uOD4nazPqd3yaKQgzo"  # fallback for test
 WEBHOOK_PATH = f"/webhook/{BOT_TOKEN}"
-WEBHOOK_URL = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}{WEBHOOK_PATH}"
+WEBHOOK_URL = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME', 'test-bot-project1.onrender.com')}{WEBHOOK_PATH}"
 
 REFERRAL_BONUS = 10
-BOT_USERNAME = "yourbotusername"  # ← এখানে তোমার বটের ইউজারনেম দাও (যেমন: mytaskearn_bot)
+BOT_USERNAME = "testing_bux_bot"  # ← তোমার আসল বটের ইউজারনেম দাও এখানে!!!
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 app = FastAPI()
 
-# ডাটাবেস ইনিশিয়ালাইজ
+# Router for handlers
+router = Router()
+dp.include_router(router)
+
+# DB functions (same as before)
 async def init_db():
     async with aiosqlite.connect('users.db') as db:
         await db.execute('''
@@ -67,9 +61,9 @@ async def add_user(user_id: int, username: str, referrer_id: int = None):
             )
             await db.commit()
 
-# ------------------ হ্যান্ডলার ------------------
-@dp.message(CommandStart(deep_link=True))
-async def start_with_ref(message):
+# Handlers using Router
+@router.message(CommandStart(deep_link=True))
+async def start_with_ref(message: Message):
     args = message.text.split()
     referrer_id = int(args[1]) if len(args) > 1 and args[1].isdigit() else None
 
@@ -81,7 +75,7 @@ async def start_with_ref(message):
     text = (
         f"🌟 স্বাগতম {message.from_user.first_name}! 🌟\n\n"
         f"তোমার রেফারেল লিংক: https://t.me/{BOT_USERNAME}?start={user_id}\n\n"
-        f"প্রতি সফল রেফারেলে {REFERRAL_BONUS} পয়েন্ট পাবে!\n"
+        f"প্রতি সফল রেফারেলে {REFERRAL_BONUS} পয়েন্ট!\n"
         "টাস্ক দেখতে /tasks দাও"
     )
 
@@ -90,53 +84,51 @@ async def start_with_ref(message):
 
     await message.answer(text, reply_markup=builder.as_markup(), disable_web_page_preview=True)
 
-
-@dp.message(CommandStart())
-async def start_command(message):
+@router.message(CommandStart())
+async def start_command(message: Message):
     await start_with_ref(message)
 
-
-@dp.message(Command("balance"))
-async def balance_command(message):
+@router.message(Command("balance"))
+async def balance_command(message: Message):
     user = await get_user(message.from_user.id)
     if user:
         await message.answer(f"💰 ব্যালেন্স: {user[2]} পয়েন্ট\n👥 রেফারেল: {user[3]} জন")
     else:
         await message.answer("প্রথমে /start করো!")
 
+@router.message(Command("tasks"))
+async def tasks_command(message: Message):
+    await message.answer("📋 টাস্ক:\n1. চ্যানেল জয়েন → ৫ পয়েন্ট (শীঘ্রই অটো)")
 
-@dp.message(Command("tasks"))
-async def tasks_command(message):
-    await message.answer(
-        "📋 বর্তমান টাস্ক:\n"
-        "1. আমাদের চ্যানেল জয়েন করো → ৫ পয়েন্ট\n"
-        "   লিংক: https://t.me/your_channel\n"
-        "   (পরে অটো চেক হবে)\n\n"
-        "আরো টাস্ক শীঘ্রই আসছে!"
+# Callback handler - এটাই আগে মিসিং ছিল!
+@router.callback_query(lambda c: c.data == "show_tasks")
+async def show_tasks_callback(callback: CallbackQuery):
+    await callback.message.edit_text(
+        "📋 টাস্ক মেনু:\n"
+        "• চ্যানেল জয়েন → ৫ পয়েন্ট\n"
+        "• পোস্ট শেয়ার → ৩ পয়েন্ট\n\n"
+        "আরো আসছে শীঘ্রই! 🚀"
     )
+    await callback.answer()  # Progress bar বন্ধ করার জন্য
 
-
-# Webhook handler
+# Webhook
 @app.post(WEBHOOK_PATH)
 async def bot_webhook(request: Request):
     update = Update.model_validate(await request.json(), context={"bot": bot})
     await dp.feed_update(bot, update)
     return {"ok": True}
 
-
 @app.on_event("startup")
 async def on_startup():
     await init_db()
     await bot.set_webhook(url=WEBHOOK_URL)
-    logger.info(f"Webhook successfully set to: {WEBHOOK_URL}")
-
+    logger.info(f"Webhook set: {WEBHOOK_URL}")
 
 @app.on_event("shutdown")
 async def on_shutdown():
     await bot.delete_webhook(drop_pending_updates=True)
     await bot.session.close()
 
-
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
