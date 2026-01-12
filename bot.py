@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # BOT_TOKEN লোড + ডিবাগ
-BOT_TOKEN = os.getenv("8059084521:AAGuVxr-6-X0Izld_uOD4nazPqd3yaKQgzo")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 logger.info("Environment variables keys: %s", list(os.environ.keys()))
 logger.info("BOT_TOKEN from os.getenv: %s", BOT_TOKEN)
